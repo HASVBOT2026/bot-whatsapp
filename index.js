@@ -21,9 +21,11 @@ const client = new Client({
     puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
+// Generar QR en texto para copiar y pegar
 client.on('qr', (qr) => {
-    console.log('QR RECIBIDO. ESCANEA AHORA:');
-    qrcode.generate(qr, { small: true });
+    console.log('>>> COPIA EL CODIGO DE ABAJO <<<');
+    console.log(qr);
+    console.log('>>> PEGALO EN: https://www.the-qrcode-generator.com/ <<<');
 });
 
 client.on('ready', () => {
