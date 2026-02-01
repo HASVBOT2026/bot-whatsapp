@@ -1,6 +1,7 @@
-FROM node:18-slim
+# CAMBIO IMPORTANTE: Usamos Node 20 para activar la seguridad 'crypto'
+FROM node:20-slim
 
-# 1. Instalamos Git y herramientas de compilación (OBLIGATORIO para evitar errores rojos)
+# 1. Instalamos Git y herramientas de compilación (OBLIGATORIO)
 RUN apt-get update && apt-get install -y git python3 make g++
 
 # 2. Configuramos la carpeta
