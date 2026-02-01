@@ -1,4 +1,5 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+// IMPORTANTE: Agregamos 'Browsers' aquí
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const http = require('http');
 const pino = require('pino');
@@ -42,16 +43,6 @@ async function consultarIA(mensaje) {
 const server = http.createServer((req, res) => { res.end('Bot Baileys Activo 🚀'); });
 server.listen(process.env.PORT || 3000);
 
-// --- 🗑️ LIMPIEZA DE EMERGENCIA (PARA ARREGLAR EL BUCLE) ---
-// Esto borra la memoria corrupta al iniciar para asegurar que pida QR nuevo
-try {
-    console.log("🧹 Limpiando sesión anterior...");
-    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
-    console.log("✅ Sesión limpiada. Listo para generar QR.");
-} catch (e) {
-    console.log("Info: No había sesión previa.");
-}
-
 // --- FUNCIÓN PRINCIPAL ---
 async function connectToWhatsApp() {
     console.log("🕒 Iniciando conexión a WhatsApp...");
@@ -60,18 +51,23 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        // Usamos 'silent' para que no llene la pantalla de basura técnica
+        // Usamos 'info' para ver si hay errores específicos, o 'silent' si ya funciona
         logger: pino({ level: 'silent' }), 
-        browser: ['HASV Bot', 'Chrome', '1.0.0'],
+        printQRInTerminal: true, // Forzamos que la librería intente imprimirlo también
+        // 🔥 CAMBIO CLAVE: Usamos una firma de navegador REAL para que WhatsApp no nos bloquee
+        browser: Browsers.ubuntu('Chrome'),
+        // Aumentamos los tiempos de espera
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 10000,
+        emitOwnEvents: true,
+        retryRequestDelayMs: 250
     });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        // AQUÍ MOSTRAMOS EL QR MANUALMENTE
+        // QR MANUAL (Respaldo)
         if (qr) {
             console.log('\n================================================');
             console.log('>>> ESCANEA ESTE CÓDIGO QR AHORA MISMO <<<');
@@ -84,11 +80,11 @@ async function connectToWhatsApp() {
             console.log(`⚠️ Desconectado. Razón: ${lastDisconnect.error?.message || 'Desconocida'}`);
             
             if (shouldReconnect) {
-                console.log("🔄 Reconectando en 2 segundos...");
-                setTimeout(connectToWhatsApp, 2000); // Pequeña pausa para evitar bucles rápidos
+                console.log("🔄 Reintentando conectar...");
+                connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            console.log('✅ BOT HASV CONECTADO CON BAILEYS');
+            console.log('✅ ¡CONEXIÓN EXITOSA! EL BOT ESTÁ LISTO.');
         }
     });
 
@@ -222,6 +218,10 @@ async function connectToWhatsApp() {
             await sock.sendPresenceUpdate('composing', remoto);
             await reply(respuestaIA);
         }
+    });
+}
+
+connectToWhatsApp();
     });
 }
 
