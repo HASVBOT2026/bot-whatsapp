@@ -5,7 +5,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
 // ⚠️ TU NÚMERO DE ADMINISTRADOR
-const NUMERO_ADMIN = '5212331109525@c.us'; 
+const NUMERO_ADMIN = '522331109525@c.us'; 
 
 // 🔥 LISTA DE CLIENTES EN ATENCIÓN HUMANA (Modo Silencio)
 const chatsEnSoporte = new Set();
