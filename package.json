@@ -1,16 +1,16 @@
 {
-  "name": "bot-whatsapp-hasv",
+  "name": "bot-hasv-baileys",
   "version": "1.0.0",
-  "description": "Bot para HASV Streaming",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js",
+    "@whiskeysockets/baileys": "^6.6.0",
     "qrcode-terminal": "^0.12.0",
     "dotenv": "^16.3.1",
-    "@google/generative-ai": "^0.1.3"
+    "@google/generative-ai": "^0.1.3",
+    "pino": "^8.0.0"
   },
   "engines": {
     "node": "18.x"
