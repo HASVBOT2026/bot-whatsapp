@@ -2,12 +2,12 @@ const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whis
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const http = require('http');
 const pino = require('pino');
-const fs = require('fs'); 
+const fs = require('fs');
 const qrcode = require('qrcode-terminal');
 require('dotenv').config();
 
-// ⚠️ TU NÚMERO DE ADMINISTRADOR (Formato Baileys)
-const NUMERO_ADMIN = '522331109525@s.whatsapp.net'; 
+// ⚠️ TU NÚMERO DE ADMINISTRADOR
+const NUMERO_ADMIN = '522331109525@s.whatsapp.net';
 
 // 🔥 LISTA DE CLIENTES EN ATENCIÓN HUMANA
 const chatsEnSoporte = new Set();
@@ -21,7 +21,7 @@ if (apiKey) {
 }
 
 async function consultarIA(mensaje) {
-    if (!model) return false; 
+    if (!model) return false;
     const prompt = `
         Actúa como el asistente experto de "HASV STREAMING".
         Tu objetivo es vender y dar soporte amable.
@@ -38,7 +38,7 @@ async function consultarIA(mensaje) {
     } catch (e) { return null; }
 }
 
-// --- SERVIDOR WEB (Keep-Alive) ---
+// --- SERVIDOR WEB ---
 const server = http.createServer((req, res) => { res.end('Bot Baileys Activo 🚀'); });
 server.listen(process.env.PORT || 3000);
 
@@ -56,7 +56,6 @@ async function connectToWhatsApp() {
         keepAliveIntervalMs: 10000,
     });
 
-    // MONITOR DE CONEXIÓN
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
@@ -75,7 +74,7 @@ async function connectToWhatsApp() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // --- CEREBRO MAESTRO ---
+    // --- CEREBRO DE MENSAJES ---
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -86,22 +85,21 @@ async function connectToWhatsApp() {
 
         console.log(`📩 Mensaje: ${texto}`);
 
-        // Funciones auxiliares
         const reply = async (txt) => { await sock.sendMessage(remoto, { text: txt }, { quoted: msg }); };
         const sendImage = async (path, caption) => {
             try { if (fs.existsSync(path)) { await sock.sendMessage(remoto, { image: fs.readFileSync(path), caption: caption }); } else { await reply(caption); } } catch (e) { await reply(caption); }
         };
 
-        // 🛑 1. MODO SILENCIO
+        // MODO SILENCIO
         if (chatsEnSoporte.has(remoto)) {
             if (['activar bot', 'menu', 'gracias', 'fin'].includes(texto)) {
                 chatsEnSoporte.delete(remoto);
                 await reply('🤖 *Bot Reactivado.*\n\n¿En qué más te puedo ayudar?\n1️⃣ Precios\n2️⃣ Pagos\n3️⃣ Horarios');
             }
-            return; 
+            return;
         }
 
-        // --- 2. INTELIGENCIA DE IMÁGENES ---
+        // IMÁGENES
         if (esImagen) {
             if (texto.includes('pago') || texto.includes('ticket') || texto.includes('deposito') || texto.includes('transferencia') || texto.includes('listo') || texto.includes('ya')) {
                 await reply('✅ *Comprobante recibido.* 📄\n\nGracias por tu pago. En un momento Humberto validará la transferencia y te entregará tu cuenta. ⏳\n\n_Ya le notifiqué para que te atienda rápido._');
@@ -114,10 +112,10 @@ async function connectToWhatsApp() {
             else {
                 await reply('📥 *Archivo recibido.*\n\nAyúdame a clasificarlo para atenderte rápido:\n➡ Escribe *YA PAGUE* si es tu comprobante. 💵\n➡ Escribe *ES FALLA* si es un reporte. 🛠');
             }
-            return; 
+            return;
         }
 
-        // --- 3. INTELIGENCIA DE VENTAS (TODA TU LÓGICA COMPLETA) ---
+        // VENTAS
         if (texto.includes('quiero') || texto.includes('me interesa') || texto.includes('dame') || texto.includes('vendes') || texto.includes('precio de') || texto.includes('tienes')) {
             let servicio = null;
             let precio = null;
@@ -142,11 +140,11 @@ async function connectToWhatsApp() {
             if (servicio && precio) {
                 const caption = `✅ *¡Excelente elección!* Vamos a activar tu ${servicio}.\n\n💰 *Total a pagar:* ${precio} MXN\n\n1️⃣ Realiza el depósito/transferencia a la cuenta de la imagen.\n2️⃣ Envía la foto del comprobante aquí mismo.\n3️⃣ Recibes tus accesos en minutos. 🚀\n\n💳 *Cuenta Mercado Pago:* \`722969010989448642\`\n👤 Humberto Antonio Sánchez Vázquez`;
                 await sendImage('./pago.jpg', caption);
-                return; 
+                return;
             }
         }
 
-        // --- 4. PREGUNTAS FRECUENTES ---
+        // PREGUNTAS FRECUENTES
         if (texto.includes('renovable') || texto.includes('mismo correo') || texto.includes('misma cuenta') || texto.includes('meses')) {
             await reply('🔄 *Información sobre Renovaciones:*\n\n✅ La mayoría de nuestros servicios SÍ SON RENOVABLES mes con mes.\n\n⚠️ *EXCEPCIONES:* Netflix, Prime y Paramount cambian cada mes.');
             return;
@@ -156,7 +154,7 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // --- 5. MENÚ Y COMANDOS CLÁSICOS ---
+        // COMANDOS MANUALES
         if (texto === 'ya pague' || texto === 'es pago') {
             await reply('✅ *Perfecto.* En breve verificamos y te entregamos tu cuenta.');
             await sock.sendMessage(NUMERO_ADMIN, { text: `💰 *CONFIRMAN PAGO*\nhttps://wa.me/${remoto.split('@')[0]}` });
@@ -198,7 +196,7 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // --- 6. IA (GEMINI) ---
+        // IA
         const respuestaIA = await consultarIA(texto);
         if (respuestaIA) {
             await sock.sendPresenceUpdate('composing', remoto);
