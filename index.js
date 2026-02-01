@@ -44,14 +44,14 @@ server.listen(process.env.PORT || 3000);
 
 // --- FUNCIÓN PRINCIPAL ---
 async function connectToWhatsApp() {
-    console.log("🕒 Iniciando conexión a WhatsApp..."); // <--- MODIFICACIÓN 1: Aviso de inicio
+    console.log("🕒 Iniciando conexión a WhatsApp...");
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
-        logger: pino({ level: 'info' }), // <--- MODIFICACIÓN 2: Activamos 'info' para ver el QR
+        // printQRInTerminal: true, <--- SE QUITÓ ESTA LÍNEA PORQUE CAUSABA EL ERROR ROJO
+        logger: pino({ level: 'silent' }), // <--- SE CAMBIÓ A 'SILENT' PARA QUE SOLO VEAS EL QR
         browser: ['HASV Bot', 'Chrome', '1.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
@@ -61,6 +61,7 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
+        // AQUÍ MOSTRAMOS EL QR MANUALMENTE Y LIMPIO
         if (qr) {
             console.log('\n================================================');
             console.log('>>> ESCANEA ESTE CÓDIGO QR (NUEVO SISTEMA) <<<');
@@ -70,7 +71,6 @@ async function connectToWhatsApp() {
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('⚠️ Conexión cerrada. Reconectando...', shouldReconnect);
             if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
             console.log('✅ BOT HASV CONECTADO CON BAILEYS');
