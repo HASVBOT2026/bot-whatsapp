@@ -42,6 +42,16 @@ async function consultarIA(mensaje) {
 const server = http.createServer((req, res) => { res.end('Bot Baileys Activo 🚀'); });
 server.listen(process.env.PORT || 3000);
 
+// --- 🗑️ LIMPIEZA DE EMERGENCIA (PARA ARREGLAR EL BUCLE) ---
+// Esto borra la memoria corrupta al iniciar para asegurar que pida QR nuevo
+try {
+    console.log("🧹 Limpiando sesión anterior...");
+    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+    console.log("✅ Sesión limpiada. Listo para generar QR.");
+} catch (e) {
+    console.log("Info: No había sesión previa.");
+}
+
 // --- FUNCIÓN PRINCIPAL ---
 async function connectToWhatsApp() {
     console.log("🕒 Iniciando conexión a WhatsApp...");
@@ -50,8 +60,8 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        // printQRInTerminal: true, <--- SE QUITÓ ESTA LÍNEA PORQUE CAUSABA EL ERROR ROJO
-        logger: pino({ level: 'silent' }), // <--- SE CAMBIÓ A 'SILENT' PARA QUE SOLO VEAS EL QR
+        // Usamos 'silent' para que no llene la pantalla de basura técnica
+        logger: pino({ level: 'silent' }), 
         browser: ['HASV Bot', 'Chrome', '1.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
@@ -61,17 +71,22 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        // AQUÍ MOSTRAMOS EL QR MANUALMENTE Y LIMPIO
+        // AQUÍ MOSTRAMOS EL QR MANUALMENTE
         if (qr) {
             console.log('\n================================================');
-            console.log('>>> ESCANEA ESTE CÓDIGO QR (NUEVO SISTEMA) <<<');
+            console.log('>>> ESCANEA ESTE CÓDIGO QR AHORA MISMO <<<');
             qrcode.generate(qr, { small: true });
             console.log('================================================\n');
         }
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) connectToWhatsApp();
+            console.log(`⚠️ Desconectado. Razón: ${lastDisconnect.error?.message || 'Desconocida'}`);
+            
+            if (shouldReconnect) {
+                console.log("🔄 Reconectando en 2 segundos...");
+                setTimeout(connectToWhatsApp, 2000); // Pequeña pausa para evitar bucles rápidos
+            }
         } else if (connection === 'open') {
             console.log('✅ BOT HASV CONECTADO CON BAILEYS');
         }
