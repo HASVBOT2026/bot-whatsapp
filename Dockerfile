@@ -3,7 +3,10 @@ FROM node:18-slim
 # Configuramos la carpeta
 WORKDIR /usr/src/app
 
-# Copiamos archivos e instalamos (Sin Chrome, sin Git pesado)
+# Instalamos Git (SOLO PARA EVITAR ERRORES DE INSTALACIÓN)
+RUN apt-get update && apt-get install -y git
+
+# Copiamos archivos e instalamos
 COPY package*.json ./
 RUN npm install
 
