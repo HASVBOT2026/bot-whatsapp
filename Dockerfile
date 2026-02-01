@@ -1,17 +1,19 @@
 FROM node:18-slim
 
-# Configuramos la carpeta
+# 1. Instalamos Git y herramientas de compilación (OBLIGATORIO para evitar errores rojos)
+RUN apt-get update && apt-get install -y git python3 make g++
+
+# 2. Configuramos la carpeta
 WORKDIR /usr/src/app
 
-# Instalamos Git (SOLO PARA EVITAR ERRORES DE INSTALACIÓN)
-RUN apt-get update && apt-get install -y git
-
-# Copiamos archivos e instalamos
+# 3. Copiamos archivos de configuración
 COPY package*.json ./
+
+# 4. Instalamos las dependencias
 RUN npm install
 
-# Copiamos el resto del bot
+# 5. Copiamos el resto del bot
 COPY . .
 
-# Encendemos
+# 6. Encendemos
 CMD [ "node", "index.js" ]
