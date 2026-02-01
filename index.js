@@ -1,4 +1,3 @@
-// IMPORTANTE: Agregamos 'Browsers' aquí
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const http = require('http');
@@ -51,12 +50,10 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        // Usamos 'info' para ver si hay errores específicos, o 'silent' si ya funciona
-        logger: pino({ level: 'silent' }), 
-        printQRInTerminal: true, // Forzamos que la librería intente imprimirlo también
-        // 🔥 CAMBIO CLAVE: Usamos una firma de navegador REAL para que WhatsApp no nos bloquee
+        printQRInTerminal: true,
+        logger: pino({ level: 'silent' }),
+        // 🔥 ESTA LÍNEA ES CLAVE PARA EVITAR EL "CONNECTION FAILURE"
         browser: Browsers.ubuntu('Chrome'),
-        // Aumentamos los tiempos de espera
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 10000,
@@ -66,8 +63,7 @@ async function connectToWhatsApp() {
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
-        
-        // QR MANUAL (Respaldo)
+
         if (qr) {
             console.log('\n================================================');
             console.log('>>> ESCANEA ESTE CÓDIGO QR AHORA MISMO <<<');
@@ -84,7 +80,7 @@ async function connectToWhatsApp() {
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            console.log('✅ ¡CONEXIÓN EXITOSA! EL BOT ESTÁ LISTO.');
+            console.log('✅ BOT HASV CONECTADO CON BAILEYS');
         }
     });
 
@@ -106,7 +102,6 @@ async function connectToWhatsApp() {
             try { if (fs.existsSync(path)) { await sock.sendMessage(remoto, { image: fs.readFileSync(path), caption: caption }); } else { await reply(caption); } } catch (e) { await reply(caption); }
         };
 
-        // MODO SILENCIO
         if (chatsEnSoporte.has(remoto)) {
             if (['activar bot', 'menu', 'gracias', 'fin'].includes(texto)) {
                 chatsEnSoporte.delete(remoto);
@@ -115,7 +110,6 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // IMÁGENES
         if (esImagen) {
             if (texto.includes('pago') || texto.includes('ticket') || texto.includes('deposito') || texto.includes('transferencia') || texto.includes('listo') || texto.includes('ya')) {
                 await reply('✅ *Comprobante recibido.* 📄\n\nGracias por tu pago. En un momento Humberto validará la transferencia y te entregará tu cuenta. ⏳\n\n_Ya le notifiqué para que te atienda rápido._');
@@ -131,7 +125,6 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // VENTAS
         if (texto.includes('quiero') || texto.includes('me interesa') || texto.includes('dame') || texto.includes('vendes') || texto.includes('precio de') || texto.includes('tienes')) {
             let servicio = null;
             let precio = null;
@@ -160,7 +153,6 @@ async function connectToWhatsApp() {
             }
         }
 
-        // PREGUNTAS FRECUENTES
         if (texto.includes('renovable') || texto.includes('mismo correo') || texto.includes('misma cuenta') || texto.includes('meses')) {
             await reply('🔄 *Información sobre Renovaciones:*\n\n✅ La mayoría de nuestros servicios SÍ SON RENOVABLES mes con mes.\n\n⚠️ *EXCEPCIONES:* Netflix, Prime y Paramount cambian cada mes.');
             return;
@@ -170,7 +162,6 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // COMANDOS MANUALES
         if (texto === 'ya pague' || texto === 'es pago') {
             await reply('✅ *Perfecto.* En breve verificamos y te entregamos tu cuenta.');
             await sock.sendMessage(NUMERO_ADMIN, { text: `💰 *CONFIRMAN PAGO*\nhttps://wa.me/${remoto.split('@')[0]}` });
@@ -212,16 +203,11 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // IA
         const respuestaIA = await consultarIA(texto);
         if (respuestaIA) {
             await sock.sendPresenceUpdate('composing', remoto);
             await reply(respuestaIA);
         }
-    });
-}
-
-connectToWhatsApp();
     });
 }
 
