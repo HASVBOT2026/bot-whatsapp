@@ -44,12 +44,14 @@ server.listen(process.env.PORT || 3000);
 
 // --- FUNCIÓN PRINCIPAL ---
 async function connectToWhatsApp() {
+    console.log("🕒 Iniciando conexión a WhatsApp..."); // <--- MODIFICACIÓN 1: Aviso de inicio
+
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: true,
-        logger: pino({ level: 'silent' }),
+        logger: pino({ level: 'info' }), // <--- MODIFICACIÓN 2: Activamos 'info' para ver el QR
         browser: ['HASV Bot', 'Chrome', '1.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
@@ -58,14 +60,17 @@ async function connectToWhatsApp() {
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
+        
         if (qr) {
             console.log('\n================================================');
             console.log('>>> ESCANEA ESTE CÓDIGO QR (NUEVO SISTEMA) <<<');
             qrcode.generate(qr, { small: true });
             console.log('================================================\n');
         }
+
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('⚠️ Conexión cerrada. Reconectando...', shouldReconnect);
             if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
             console.log('✅ BOT HASV CONECTADO CON BAILEYS');
@@ -83,7 +88,7 @@ async function connectToWhatsApp() {
         const texto = (msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '').toLowerCase();
         const esImagen = !!msg.message.imageMessage;
 
-        console.log(`📩 Mensaje: ${texto}`);
+        console.log(`📩 Mensaje de ${remoto}: ${texto}`);
 
         const reply = async (txt) => { await sock.sendMessage(remoto, { text: txt }, { quoted: msg }); };
         const sendImage = async (path, caption) => {
