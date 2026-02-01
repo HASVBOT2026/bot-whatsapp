@@ -50,7 +50,6 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
         logger: pino({ level: 'silent' }),
         // 🔥 ESTA LÍNEA ES CLAVE PARA EVITAR EL "CONNECTION FAILURE"
         browser: Browsers.ubuntu('Chrome'),
