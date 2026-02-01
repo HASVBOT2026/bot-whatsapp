@@ -1,6 +1,8 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const http = require('http');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+require('dotenv').config();
 
 // ⚠️ TU NÚMERO DE ADMINISTRADOR
 const NUMERO_ADMIN = '5212331109525@c.us'; 
@@ -8,33 +10,84 @@ const NUMERO_ADMIN = '5212331109525@c.us';
 // 🔥 LISTA DE CLIENTES EN ATENCIÓN HUMANA (Modo Silencio)
 const chatsEnSoporte = new Set();
 
-// --- PARTE 1: SERVIDOR (Mantiene vivo al bot en Render) ---
+// --- CONFIGURACIÓN DE INTELIGENCIA ARTIFICIAL (GEMINI) ---
+// Si no pones la API KEY en Railway, esta parte se desactiva sola
+const apiKey = process.env.API_KEY;
+let model = null;
+
+if (apiKey) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    model = genAI.getGenerativeModel({ model: "gemini-pro" });
+}
+
+async function consultarIA(mensaje) {
+    if (!model) return false; // Si no hay IA, regresamos falso para no hacer nada
+    
+    // Le damos tu manual de ventas a la IA
+    const prompt = `
+        Actúa como el asistente experto de "HASV STREAMING".
+        Tu objetivo es vender y dar soporte amable.
+        
+        DATOS CLAVE:
+        - Vendes: Netflix ($65), Disney+ ($35), HBO ($30), Prime ($30).
+        - Pagos: Transferencia a Mercado Pago (Cuenta a nombre de Humberto).
+        - Soporte: Si reportan falla, diles que escriban "ES FALLA".
+        - Tono: Amigable, usa emojis, respuestas cortas (máximo 2 párrafos).
+        
+        El cliente dice: "${mensaje}"
+    `;
+    
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        return null;
+    }
+}
+
+// --- PARTE 1: SERVIDOR (Mantiene vivo al bot en Render/Railway) ---
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot HASV Streaming - Sistema Completo Activo');
+    res.end('Bot HASV Streaming - IA Activa');
 });
 server.listen(process.env.PORT || 3000);
 
-// --- PARTE 2: CONFIGURACIÓN DEL CLIENTE ---
+// --- PARTE 2: CONFIGURACIÓN DEL CLIENTE (CON FIX DE CONEXIÓN) ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+    puppeteer: { 
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    },
+    // 🔥 ESTA ES LA CORRECCIÓN PARA QUE ESCUCHE LOS MENSAJES:
+    webVersionCache: {
+        type: "remote",
+        remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+    }
 });
 
-// Generar QR en texto para copiar y pegar
 client.on('qr', (qr) => {
-    console.log('>>> COPIA EL CODIGO DE ABAJO <<<');
-    console.log(qr);
-    console.log('>>> PEGALO EN: https://www.the-qrcode-generator.com/ <<<');
+    console.log('\n================================================');
+    console.log('>>> PARA CONECTARTE: COPIA EL CÓDIGO LARGO DE ABAJO');
+    console.log('>>> Y PÉGALO EN: https://www.the-qrcode-generator.com/');
+    console.log('================================================\n');
+    console.log(qr); 
+    console.log('\n================================================');
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot conectado con Ventas, Soporte e Inteligencia.');
+    console.log('✅ Bot HASV conectado con IA y Ventas.');
 });
 
 // --- PARTE 3: CEREBRO MAESTRO ---
 client.on('message', async msg => {
+    // Ignorar estados y grupos
+    if (msg.from.includes('status') || msg.from.includes('@g.us')) return;
+
     const texto = msg.body.toLowerCase();
+    
+    console.log(`📩 Mensaje de ${msg.from}: ${texto}`);
     
     // 🛑 1. FILTRO DE MODO SILENCIO (SOPORTE HUMANO)
     if (chatsEnSoporte.has(msg.from)) {
@@ -42,7 +95,7 @@ client.on('message', async msg => {
             chatsEnSoporte.delete(msg.from);
             await msg.reply('🤖 *Bot Reactivado.*\n\n¿En qué más te puedo ayudar?\n1️⃣ Precios\n2️⃣ Pagos\n3️⃣ Horarios');
         } 
-        return; 
+        return; // Si está en soporte humano, el bot NO hace nada más
     }
 
     // --- 2. INTELIGENCIA DE IMÁGENES ---
@@ -64,14 +117,13 @@ client.on('message', async msg => {
     }
 
     // --- 3. INTELIGENCIA DE VENTAS (AUTO-CIERRE) ---
-    // Detecta intención de compra, busca el precio y manda la cuenta.
+    // Detecta intención de compra exacta
     if (texto.includes('quiero') || texto.includes('me interesa') || texto.includes('dame') || texto.includes('vendes') || texto.includes('precio de') || texto.includes('tienes')) {
         
         let servicio = null;
         let precio = null;
 
-        // Detector de Servicios y Precios (Basado en tu lista)
-        // Cuentas Completas
+        // Detector de Servicios y Precios
         if (texto.includes('disney') && texto.includes('completa')) { servicio = 'Disney+ (Completa)'; precio = '$95'; }
         else if (texto.includes('hbo') && texto.includes('completa')) { servicio = 'HBO Max (Completa)'; precio = '$80'; }
         else if (texto.includes('prime') && texto.includes('completa')) { servicio = 'Prime Video (Completa)'; precio = '$85'; }
@@ -90,7 +142,6 @@ client.on('message', async msg => {
         else if (texto.includes('canva')) { servicio = 'Canva Pro (1 Mes)'; precio = '$35'; }
         else if (texto.includes('plex') || texto.includes('deezer')) { servicio = 'Plex/Deezer'; precio = '$35'; }
 
-        // Si detectamos un servicio válido, mandamos el cobro directo
         if (servicio && precio) {
             try {
                 const media = MessageMedia.fromFilePath('./pago.jpg');
@@ -105,37 +156,22 @@ client.on('message', async msg => {
             } catch (e) {
                 msg.reply(`Para activar *${servicio}* son *${precio} MXN*.\nDeposita a: 722969010989448642 (Mercado Pago) y manda foto.`);
             }
-            return; // Detenemos aquí para cerrar la venta
+            return; 
         }
     }
 
-    // --- 4. PREGUNTAS FRECUENTES (REGLAS Y GARANTÍA) ---
-
-    // Regla de Renovación (La excepción que pediste)
+    // --- 4. PREGUNTAS FRECUENTES ---
     if (texto.includes('renovable') || texto.includes('mismo correo') || texto.includes('misma cuenta') || texto.includes('meses')) {
-        await msg.reply(
-            '🔄 *Información sobre Renovaciones:*\n\n' +
-            '✅ La mayoría de nuestros servicios (Cuentas Completas y Perfiles como Disney, HBO, Vix, etc.) **SÍ SON RENOVABLES** mes con mes.\n\n' +
-            '⚠️ *EXCEPCIONES (No Renovables):*\n' +
-            'Los Perfiles de *Netflix, Prime Video y Paramount+* cambian cada mes (se entrega cuenta nueva).\n\n' +
-            '¿Tienes alguna otra duda o deseas contratar?'
-        );
+        await msg.reply('🔄 *Información sobre Renovaciones:*\n\n✅ La mayoría de nuestros servicios SÍ SON RENOVABLES mes con mes.\n\n⚠️ *EXCEPCIONES:* Netflix, Prime y Paramount cambian cada mes.');
         return;
     }
 
-    // Regla de Garantía y Soporte
     if (texto.includes('garantia') || texto.includes('cae') || texto.includes('fallas') || texto.includes('seguro')) {
-        await msg.reply(
-            '🛡️ *Garantía y Soporte HASV*\n\n' +
-            'Tu servicio cuenta con garantía total durante el tiempo contratado.\n\n' +
-            '🛠 *¿Qué pasa si falla?*\n' +
-            'Simplemente reportas la caída con nosotros (Opción 4 Soporte) y se te brinda una solución o reposición inmediata.\n\n' +
-            '🚫 *OJO:* La garantía se anula si cambias los datos de acceso (correo/contraseña).'
-        );
+        await msg.reply('🛡️ *Garantía y Soporte HASV*\n\nTu servicio cuenta con garantía total. Si falla, solo repórtalo y te lo solucionamos. 🚫 La garantía se anula si cambias la contraseña.');
         return;
     }
 
-    // --- 5. RESPUESTAS A LA CLASIFICACIÓN MANUAL ---
+    // --- 5. MENÚ Y COMANDOS CLÁSICOS ---
     if (texto === 'ya pague' || texto === 'es pago') {
         await msg.reply('✅ *Perfecto.* En breve verificamos y te entregamos tu cuenta.');
         const linkChat = `https://wa.me/${msg.from.replace('@c.us', '')}`;
@@ -149,7 +185,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // --- 6. MENÚ PRINCIPAL ---
     if (['hola', 'buenas', 'info', 'menu', 'dias', 'bot'].some(palabra => texto.includes(palabra))) {
         await msg.reply(
             '👋 *¡Hola! Bienvenido a HASV STREAMING* 💎\n\n' +
@@ -158,71 +193,63 @@ client.on('message', async msg => {
             '2️⃣ *DATOS DE PAGO* (Depositar)\n' +
             '3️⃣ *HORARIO* (Atención)\n' +
             '4️⃣ *SOPORTE HUMANO* (Hablar con Humberto)\n\n' +
-            '🚀 _Respondo al instante 24/7._'
+            '🚀 _O escribe tu duda y te respondo al instante._'
         );
+        return;
     }
 
-    // --- 7. OPCIONES DEL MENÚ ---
-    // 1️⃣ PRECIOS
-    else if (texto.includes('1') || texto.includes('precio') || texto.includes('costo')) {
+    // OPCIONES NUMÉRICAS
+    if (texto.includes('1') || texto.includes('precio') || texto.includes('costo')) {
         try {
             const media = MessageMedia.fromFilePath('./logo.jpg');
             await client.sendMessage(msg.from, media, { caption: 
                 '💎 *LISTA DE PRECIOS OFICIAL* 💎\n\n' +
-                '👤 *PERFILES (1 Disp)*\n• Netflix: $65\n• Disney+ (Dep): $35\n• HBO Max: $30\n• Prime: $30\n• Crunchyroll: $30\n• Vix+: $30\n• Deezer/Plex: $35\n\n' +
-                '🏠 *CUENTAS COMPLETAS*\n• Disney+ (7 per): $95\n• HBO Max (5 per): $80\n• Prime (6 per): $85\n• Paramount+ (6 per): $65\n• Vix+ (5 per): $55\n\n' +
-                '🎮 *EXTRAS*\n• Canva Pro ($35)\n• Free Fire (Recargas)\n• Social Media\n\n⚠ _Consulta disponibilidad._'
+                '👤 *PERFILES*\n• Netflix: $65\n• Disney+: $35\n• HBO Max: $30\n• Prime: $30\n• Vix+: $30\n\n' +
+                '🏠 *CUENTAS COMPLETAS*\n• Disney+ (7p): $95\n• HBO Max (5p): $80\n• Prime (6p): $85\n\n⚠ _Consulta disponibilidad._'
             });
         } catch (e) {
-            msg.reply('⚠ *Precios:* Netflix $65, Disney $35, HBO $30. (No cargó la imagen).');
+            msg.reply('⚠ *Precios:* Netflix $65, Disney $35, HBO $30.');
         }
+        return;
     }
-
-    // 2️⃣ PAGOS
     else if (texto.includes('2') || texto.includes('pago') || texto.includes('cuenta')) {
         try {
             const media = MessageMedia.fromFilePath('./pago.jpg');
             await client.sendMessage(msg.from, media, { caption: 
-                '💳 *DATOS DE PAGO* 💳\n\n' +
-                '🏛 *Banco:* Mercado Pago\n' +
-                '🔢 *Cuenta:* `722969010989448642`\n' +
-                '👤 *Titular:* Humberto Antonio Sánchez Vázquez\n\n' +
-                '🚨 *IMPORTANTE:* En Concepto pon TU NOMBRE o DONATIVO.\n📸 *Envía FOTO del comprobante.*' 
+                '💳 *DATOS DE PAGO*\nBanco: Mercado Pago\nCuenta: `722969010989448642`\nTitular: Humberto Antonio Sánchez Vázquez\n\n📸 *Envía FOTO del comprobante.*' 
             });
         } catch (e) {
             msg.reply('Mercado Pago: 722969010989448642\nHumberto A. Sánchez V.');
         }
+        return;
     }
-
-    // 3️⃣ HORARIOS
-    else if (texto.includes('3') || texto.includes('horario') || texto.includes('hora')) {
-        await msg.reply(
-            '⏰ *HORARIO DE ATENCIÓN*\n\n' +
-            '📅 Lunes-Viernes: 7:00 AM - 10:00 PM\n' +
-            '📅 Sábados-Domingos: 8:00 AM - 9:00 PM\n\n' +
-            '🍽 *Comida:* 11:00 AM - 12:00 PM\n' +
-            '💤 _Fuera de horario contesto en cuanto pueda._'
-        );
+    else if (texto.includes('3') || texto.includes('horario')) {
+        await msg.reply('⏰ *HORARIO*\nLunes-Viernes: 7AM - 10PM\nFines: 8AM - 9PM');
+        return;
     }
-
-    // 4️⃣ SOPORTE HUMANO (Activación de Silencio)
-    else if (texto.includes('4') || texto.includes('soporte') || texto.includes('ayuda') || texto.includes('humano')) {
-        await msg.reply(
-            '🤖 *ASISTENTE AUTOMÁTICO*\n\n' +
-            '¿Deseas que me desactive para que Humberto te atienda personalmente? 👤\n\n' +
-            '➡ Escribe *SI* para confirmar.\n' +
-            '➡ Escribe *MENU* para cancelar.'
-        );
+    else if (texto.includes('4') || texto.includes('soporte') || texto.includes('humano')) {
+        await msg.reply('🤖 *ASISTENTE AUTOMÁTICO*\n¿Quieres desactivarme?\n➡ Escribe *SI* para hablar con Humberto.\n➡ Escribe *MENU* para cancelar.');
+        return;
     }
-
-    // CONFIRMACIÓN DE MODO SILENCIO ("SI")
     else if (texto === 'si' || texto === 'sí') {
         chatsEnSoporte.add(msg.from);
-        await msg.reply('✅ *Entendido. Me voy a dormir.* 💤\n\nYa le avisé a Humberto. Él te escribirá en breve.\n\n_(Cuando terminen, escribe "MENU" o "GRACIAS" para despertarme)._');
+        await msg.reply('✅ *Entendido. Me voy a dormir.* 💤\nHumberto te atenderá pronto.');
         const linkChat = `https://wa.me/${msg.from.replace('@c.us', '')}`;
-        await client.sendMessage(NUMERO_ADMIN, `🔇 *SOPORTE ACTIVADO (BOT SILENCIADO)*\nEl cliente pidió ayuda humana.\n🔗 *Entra ya:* ${linkChat}`);
+        await client.sendMessage(NUMERO_ADMIN, `🔇 *SOPORTE HUMANO SOLICITADO*\n${linkChat}`);
+        return;
     }
 
+    // --- 6. 🧠 LA ÚLTIMA LÍNEA DE DEFENSA: INTELIGENCIA ARTIFICIAL ---
+    // Si el mensaje no coincide con NINGUNA regla anterior, le preguntamos a la IA.
+    const respuestaIA = await consultarIA(msg.body);
+    
+    if (respuestaIA) {
+        // Simulamos que escribe
+        const chat = await msg.getChat();
+        chat.sendStateTyping();
+        // Respondemos con IA
+        await msg.reply(respuestaIA);
+    }
 });
 
 client.initialize();
